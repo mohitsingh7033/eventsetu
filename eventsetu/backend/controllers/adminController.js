@@ -1,17 +1,6 @@
 const User = require('../models/User');
 const Event = require('../models/Event');
 const Booking = require('../models/Booking');
-const nodemailer = require('nodemailer');
-
-// Email transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
 
 // @desc Admin dashboard stats
 // @route GET /api/admin/stats
@@ -94,7 +83,10 @@ exports.getPendingBookings = async (req, res) => {
       status: 'pending',
     })
       .populate('user', 'name email')
-      .populate('event', 'title date time location price')
+      .populate(
+        'event',
+        'title date time location price'
+      )
       .sort({ createdAt: -1 });
 
     res.json(bookings);
@@ -112,7 +104,10 @@ exports.confirmBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
       .populate('user', 'name email')
-      .populate('event', 'title date time location price');
+      .populate(
+        'event',
+        'title date time location price'
+      );
 
     if (!booking) {
       return res.status(404).json({
@@ -135,57 +130,146 @@ exports.confirmBooking = async (req, res) => {
     // Confirm booking
     booking.status = 'confirmed';
 
-    // Payment is still pending because we are not using a real payment gateway
+    // No real payment gateway yet
     booking.paymentStatus = 'pending';
 
     await booking.save();
 
-    // Send confirmation email
+    // Send confirmation email using Brevo
     try {
-      await transporter.sendMail({
-        from: `"${process.env.EMAIL_FROM_NAME || 'EventSetu'}" <${process.env.EMAIL_USER}>`,
-        to: booking.user.email,
-        subject: `Booking Confirmed - ${booking.event.title}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-            <h2>🎉 Booking Confirmed!</h2>
+      const emailResponse = await fetch(
+        'https://api.brevo.com/v3/smtp/email',
+        {
+          method: 'POST',
 
-            <p>Hello ${booking.user.name || 'User'},</p>
+          headers: {
+            accept: 'application/json',
+            'Content-Type': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+          },
 
-            <p>
-              Your booking has been confirmed by the EventSetu admin.
-            </p>
+          body: JSON.stringify({
+            sender: {
+              name:
+                process.env.EMAIL_FROM_NAME ||
+                'EventSetu',
 
-            <h3>Event Details</h3>
+              email: process.env.EMAIL_USER,
+            },
 
-            <p><strong>Event:</strong> ${booking.event.title}</p>
-            <p><strong>Date:</strong> ${booking.event.date || 'As scheduled'}</p>
-            <p><strong>Time:</strong> ${booking.event.time || 'As scheduled'}</p>
-            <p><strong>Location:</strong> ${booking.event.location || 'Event venue'}</p>
-            <p><strong>Seats:</strong> ${booking.seats}</p>
-            <p><strong>Total Amount:</strong> ₹${booking.totalAmount}</p>
+            to: [
+              {
+                email: booking.user.email,
+                name: booking.user.name || 'User',
+              },
+            ],
 
-            <p>
-              Thank you for using <strong>EventSetu</strong>.
-            </p>
+            subject: `Booking Confirmed - ${booking.event.title}`,
 
-            <p>See you at the event! 🎵</p>
-          </div>
-        `,
-      });
+            htmlContent: `
+              <div
+                style="
+                  font-family: Arial, sans-serif;
+                  line-height: 1.6;
+                  max-width: 600px;
+                  margin: auto;
+                "
+              >
+
+                <h2>🎉 Booking Confirmed!</h2>
+
+                <p>
+                  Hello ${booking.user.name || 'User'},
+                </p>
+
+                <p>
+                  Your booking has been confirmed by
+                  the EventSetu admin.
+                </p>
+
+                <h3>Event Details</h3>
+
+                <p>
+                  <strong>Event:</strong>
+                  ${booking.event.title}
+                </p>
+
+                <p>
+                  <strong>Date:</strong>
+                  ${booking.event.date || 'As scheduled'}
+                </p>
+
+                <p>
+                  <strong>Time:</strong>
+                  ${booking.event.time || 'As scheduled'}
+                </p>
+
+                <p>
+                  <strong>Location:</strong>
+                  ${booking.event.location || 'Event venue'}
+                </p>
+
+                <p>
+                  <strong>Seats:</strong>
+                  ${booking.seats}
+                </p>
+
+                <p>
+                  <strong>Total Amount:</strong>
+                  ₹${booking.totalAmount}
+                </p>
+
+                <hr />
+
+                <p>
+                  Thank you for using
+                  <strong>EventSetu</strong>.
+                </p>
+
+                <p>
+                  See you at the event! 🎵
+                </p>
+
+              </div>
+            `,
+          }),
+        }
+      );
+
+      const emailData = await emailResponse.json();
+
+      if (!emailResponse.ok) {
+        throw new Error(
+          emailData.message ||
+          'Brevo email failed'
+        );
+      }
+
+      console.log(
+        'Confirmation email sent successfully:',
+        emailData.messageId
+      );
+
     } catch (emailError) {
-      console.error('Email sending failed:', emailError.message);
+      console.error(
+        'Email sending failed:',
+        emailError.message
+      );
 
       return res.json({
-        message: 'Booking confirmed, but email could not be sent.',
+        message:
+          'Booking confirmed, but email could not be sent.',
         booking,
       });
     }
 
+    // Final success response
     res.json({
-      message: 'Booking confirmed and email sent successfully.',
+      message:
+        'Booking confirmed and email sent successfully.',
       booking,
     });
+
   } catch (err) {
     res.status(500).json({
       message: err.message,
