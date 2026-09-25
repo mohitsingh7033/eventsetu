@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-paper text-ink font-body;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Fraunces', serif;
+}
+
+.btn-primary {
+  @apply bg-brand text-white px-5 py-2.5 rounded-full hover:bg-brand-dark transition-all font-medium text-sm shadow-sm hover:shadow-md active:scale-[0.98];
+}
+
+.btn-outline {
+  @apply border border-ink/15 text-ink px-5 py-2.5 rounded-full hover:border-ink/40 hover:bg-ink/[0.03] transition-all font-medium text-sm active:scale-[0.98];
+}
+
+.input-field {
+  @apply w-full border border-ink/15 rounded-xl px-3.5 py-2.5 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 transition-shadow text-[15px];
+}
+
+.badge {
+  @apply inline-flex items-center text-[11px] font-medium px-2.5 py-1 rounded-full;
+}
+
+::selection {
+  background: #C9762C33;
+}
